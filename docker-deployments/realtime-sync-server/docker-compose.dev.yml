@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Sync Server Application
+  sync-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sync-server:latest
+    container_name: sync-server-dev
+    restart: unless-stopped
+    ports:
+      - "3001:3001"  # Use port 3001
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - REDIS_URL=redis://redis:6379
+      - DB_PATH=/app/data/database.sqlite
+      - JWT_SECRET=${JWT_SECRET:-NC95wKP3QcAdhkOtAOKbESQUopOW9VAjy8gbrCVHsLY=}
+    volumes:
+      - sync_data:/app/data
+      - sync_logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sync-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: sync-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6380:6379"  # Use port 6380 to avoid conflicts
+    volumes:
+      - redis_data:/data
+    networks:
+      - sync-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+volumes:
+  sync_data:
+    driver: local
+  sync_logs:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  sync-network:
+    driver: bridge

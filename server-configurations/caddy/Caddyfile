@@ -1,0 +1,23 @@
+sean.codeovertcp.com {
+    root * /home/seanos1a/h2h/dist
+    file_server
+
+    # SPA routing - serve index.html for all non-file requests
+    try_files {path} /index.html
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Enable gzip compression
+    encode gzip
+
+    # Logging
+    log {
+        output file /var/log/caddy/sean-access.log
+    }
+}

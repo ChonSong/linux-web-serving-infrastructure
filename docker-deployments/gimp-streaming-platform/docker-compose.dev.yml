@@ -1,0 +1,324 @@
+version: '3.8'
+
+services:
+  # Database Services
+  postgres:
+    image: postgres:14-alpine
+    container_name: gimp-postgres
+    environment:
+      POSTGRES_DB: gimp_streaming
+      POSTGRES_USER: gimp_user
+      POSTGRES_PASSWORD: gimp_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - gimp-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gimp_user -d gimp_streaming"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6-alpine
+    container_name: gimp-redis
+    command: redis-server --requirepass redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - gimp-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Backend Services
+  auth-service:
+    build:
+      context: .
+      dockerfile: docker/auth/Dockerfile.dev
+    container_name: gimp-auth-service
+    environment:
+      - DATABASE_URL=postgresql://gimp_user:gimp_password@postgres:5432/gimp_streaming
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=dev-jwt-secret-key
+      - APP_ENV=development
+    ports:
+      - "8001:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src/services/auth-service:/app
+      - /app/vendor
+    networks:
+      - gimp-network
+    command: air -c .air.toml
+
+  session-manager:
+    build:
+      context: .
+      dockerfile: docker/session-manager/Dockerfile.dev
+    container_name: gimp-session-manager
+    environment:
+      - DATABASE_URL=postgresql://gimp_user:gimp_password@postgres:5432/gimp_streaming
+      - REDIS_URL=redis://redis:6379
+      - KUBERNETES_NAMESPACE=dev
+      - GIMP_IMAGE=gimp:dev
+    ports:
+      - "8002:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src/services/session-manager:/app
+      - /app/vendor
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - gimp-network
+    command: air -c .air.toml
+
+  storage-service:
+    build:
+      context: .
+      dockerfile: docker/storage/Dockerfile.dev
+    container_name: gimp-storage-service
+    environment:
+      - DATABASE_URL=postgresql://gimp_user:gimp_password@postgres:5432/gimp_streaming
+      - REDIS_URL=redis://redis:6379
+      - AWS_ACCESS_KEY_ID=test-key
+      - AWS_SECRET_ACCESS_KEY=test-secret
+      - AWS_S3_BUCKET=test-bucket
+      - CLOUD_STORAGE_PROVIDER=local
+    ports:
+      - "8003:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src/services/storage-service:/app
+      - /app/vendor
+      - storage_data:/app/storage
+    networks:
+      - gimp-network
+    command: air -c .air.toml
+
+  billing-service:
+    build:
+      context: .
+      dockerfile: docker/billing/Dockerfile.dev
+    container_name: gimp-billing-service
+    environment:
+      - DATABASE_URL=postgresql://gimp_user:gimp_password@postgres:5432/gimp_streaming
+      - REDIS_URL=redis://redis:6379
+      - STRIPE_API_KEY=sk_test_dev_key
+      - STRIPE_WEBHOOK_SECRET=whsec_dev_secret
+    ports:
+      - "8004:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src/services/billing-service:/app
+      - /app/vendor
+    networks:
+      - gimp-network
+    command: air -c .air.toml
+
+  # Streaming Services
+  streaming-server:
+    build:
+      context: .
+      dockerfile: docker/streaming-server/Dockerfile.dev
+    container_name: gimp-streaming-server
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - VNC_PASSWORD=dev_vnc_password
+      - WEBRTC_STUN_SERVER=stun:stun.l.google.com:19302
+    ports:
+      - "8005:8080"
+      - "5901:5901"  # VNC
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src/streaming:/app
+      - /app/node_modules
+    networks:
+      - gimp-network
+    command: npm run dev
+
+  # GIMP Container (for testing)
+  gimp-dev:
+    build:
+      context: .
+      dockerfile: docker/gimp/Dockerfile.dev
+    container_name: gimp-dev-container
+    environment:
+      - DISPLAY=:1
+      - VNC_PASSWORD=dev_vnc_password
+    ports:
+      - "5902:5901"  # VNC
+    volumes:
+      - gimp_dev_data:/home/gimp
+    networks:
+      - gimp-network
+    cap_add:
+      - SYS_ADMIN
+
+  # Frontend Services
+  web-client:
+    build:
+      context: ./src/frontend/web-client
+      dockerfile: ../../docker/frontend/Dockerfile.dev
+    container_name: gimp-web-client
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080
+      - REACT_APP_WS_URL=ws://localhost:8005
+      - REACT_APP_ENV=development
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src/frontend/web-client:/app
+      - /app/node_modules
+    networks:
+      - gimp-network
+    command: npm start
+
+  dashboard:
+    build:
+      context: ./src/frontend/dashboard
+      dockerfile: ../../docker/frontend/Dockerfile.dev
+    container_name: gimp-dashboard
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080
+      - REACT_APP_ENV=development
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./src/frontend/dashboard:/app
+      - /app/node_modules
+    networks:
+      - gimp-network
+    command: npm start
+
+  admin-panel:
+    build:
+      context: ./src/frontend/admin-panel
+      dockerfile: ../../docker/frontend/Dockerfile.dev
+    container_name: gimp-admin-panel
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080
+      - REACT_APP_ENV=development
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./src/frontend/admin-panel:/app
+      - /app/node_modules
+    networks:
+      - gimp-network
+    command: npm start
+
+  # API Gateway
+  nginx:
+    image: nginx:alpine
+    container_name: gimp-nginx
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./config/nginx/nginx.dev.conf:/etc/nginx/nginx.conf
+      - ./config/ssl:/etc/nginx/ssl
+    depends_on:
+      - auth-service
+      - session-manager
+      - storage-service
+      - billing-service
+      - web-client
+    networks:
+      - gimp-network
+
+  # Monitoring Services
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gimp-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.dev.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - gimp-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: gimp-grafana
+    ports:
+      - "3003:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - gimp-network
+
+  # Message Queue (for async operations)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: gimp-rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin_password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - gimp-network
+
+# Networks
+networks:
+  gimp-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volumes
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  storage_data:
+    driver: local
+  gimp_dev_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  rabbitmq_data:
+    driver: local

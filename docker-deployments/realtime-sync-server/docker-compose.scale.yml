@@ -1,0 +1,188 @@
+version: '3.8'
+
+services:
+  # Load Balancer (HAProxy)
+  load-balancer:
+    image: haproxy:2.8-alpine
+    container_name: sync-haproxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8404:8404"  # HAProxy stats
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./ssl:/etc/ssl/certs:ro
+      - haproxy_logs:/var/log/haproxy
+    depends_on:
+      - sync-server-1
+      - sync-server-2
+      - sync-server-3
+    networks:
+      - sync-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8404/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Multiple Sync Server Instances
+  sync-server-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sync-server:latest
+    container_name: sync-server-1
+    restart: always
+    env_file:
+      - .env.production
+    environment:
+      - SERVER_ID=server-1
+      - SERVER_PORT=3001
+    volumes:
+      - sync_data_1:/app/data
+      - sync_logs_1:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sync-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  sync-server-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sync-server:latest
+    container_name: sync-server-2
+    restart: always
+    env_file:
+      - .env.production
+    environment:
+      - SERVER_ID=server-2
+      - SERVER_PORT=3001
+    volumes:
+      - sync_data_2:/app/data
+      - sync_logs_2:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sync-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  sync-server-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sync-server:latest
+    container_name: sync-server-3
+    restart: always
+    env_file:
+      - .env.production
+    environment:
+      - SERVER_ID=server-3
+      - SERVER_PORT=3001
+    volumes:
+      - sync_data_3:/app/data
+      - sync_logs_3:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sync-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis Cluster Configuration
+  redis:
+    image: redis:7-alpine
+    container_name: sync-redis-cluster
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_cluster:/data
+      - ./redis/redis.conf:/etc/redis/redis.conf:ro
+    networks:
+      - sync-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: redis-server /etc/redis/redis.conf
+
+  # Redis Sentinel for High Availability
+  redis-sentinel:
+    image: redis:7-alpine
+    container_name: sync-redis-sentinel
+    restart: always
+    ports:
+      - "26379:26379"
+    volumes:
+      - ./redis/sentinel.conf:/etc/redis/sentinel.conf:ro
+    depends_on:
+      - redis
+    networks:
+      - sync-network
+    command: redis-sentinel /etc/redis/sentinel.conf
+
+volumes:
+  sync_data_1:
+    driver: local
+  sync_data_2:
+    driver: local
+  sync_data_3:
+    driver: local
+  sync_logs_1:
+    driver: local
+  sync_logs_2:
+    driver: local
+  sync_logs_3:
+    driver: local
+  redis_data_cluster:
+    driver: local
+  haproxy_logs:
+    driver: local
+
+networks:
+  sync-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16

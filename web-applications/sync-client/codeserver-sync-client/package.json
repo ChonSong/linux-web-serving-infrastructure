@@ -1,0 +1,36 @@
+{
+  "name": "codeserver-sync-client",
+  "version": "1.0.0",
+  "description": "Client-side library for cross-device synchronization in code-server",
+  "main": "dist/sync-client.js",
+  "module": "dist/sync-client.esm.js",
+  "types": "dist/sync-client.d.ts",
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "test": "jest"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.5",
+    "@types/node": "^20.10.5",
+    "rollup": "^4.9.1",
+    "typescript": "^5.3.3"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "code-server",
+    "sync",
+    "realtime",
+    "cross-device",
+    "websocket"
+  ],
+  "author": "",
+  "license": "MIT"
+}
