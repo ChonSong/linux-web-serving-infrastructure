@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # GIMP Container
+  gimp-dev:
+    build:
+      context: .
+      dockerfile: docker/gimp/Dockerfile.dev
+    container_name: gimp-dev-container
+    environment:
+      - DISPLAY=:1
+      - VNC_PASSWORD=vncpassword
+    ports:
+      - "5901:5901"
+    networks:
+      - gimp-network
+    cap_add:
+      - SYS_ADMIN
+
+  # Streaming Server (Websockify)
+  streaming-server:
+    build:
+      context: .
+      dockerfile: docker/streaming-server/Dockerfile.dev
+    container_name: gimp-streaming-server
+    environment:
+      - VNC_HOST=gimp-dev
+      - VNC_PORT=5901
+      - PORT=8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      - gimp-dev
+    networks:
+      - gimp-network
+
+  # Web Client
+  web-client:
+    build:
+      context: ./src/frontend/web-client
+      dockerfile: ../../../docker/frontend/Dockerfile.dev
+    container_name: gimp-web-client
+    environment:
+      - REACT_APP_WS_URL=ws://localhost:8080
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src/frontend/web-client:/app
+      - /app/node_modules
+    networks:
+      - gimp-network
+
+  # Nginx
+  nginx:
+    image: nginx:alpine
+    container_name: gimp-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./config/nginx/nginx.dev.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - web-client
+      - streaming-server
+    networks:
+      - gimp-network
+
+networks:
+  gimp-network:
+    driver: bridge
