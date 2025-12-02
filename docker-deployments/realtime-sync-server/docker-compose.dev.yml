@@ -4,8 +4,8 @@ services:
   # Sync Server Application
   sync-server:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../../web-applications
+      dockerfile: ../docker-deployments/realtime-sync-server/Dockerfile
     image: sync-server:latest
     container_name: sync-server-dev
     restart: unless-stopped
