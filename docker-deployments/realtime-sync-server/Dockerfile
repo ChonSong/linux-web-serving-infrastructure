@@ -1,8 +1,8 @@
-# Use Node.js Alpine for smaller image size
-FROM node:18-alpine AS base
+# Use Node.js Debian slim for better native module compatibility
+FROM node:18-slim AS base
 
 # Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -10,12 +10,12 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
+# Install dependencies (rebuild native modules for Alpine)
 RUN npm ci --only=production && npm cache clean --force
 
 # Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+RUN groupadd -g 1001 nodejs && \
+    useradd -u 1001 -g nodejs -s /bin/bash nodejs
 
 # Copy application code
 COPY --chown=nodejs:nodejs . .
