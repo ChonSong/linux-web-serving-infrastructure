@@ -1,17 +1,17 @@
 #!/bin/bash
 # scripts/start_battlenet.sh
-# Starts Battle.net launcher with Wine
+# Installs and starts Battle.net launcher with Wine
 
-echo "Starting Battle.net launcher..."
+echo "Starting Battle.net setup..."
 
 # Set up environment
 export DISPLAY=:0
-export WINEPREFIX=/home/webbian/.wine
+export WINEPREFIX=/root/.wine
 export WINEARCH=win32
 
 # Wait for X server to be ready
 echo "Waiting for X server..."
-MAX_WAIT=30
+MAX_WAIT=60
 WAIT_COUNT=0
 
 while ! xdpyinfo -display :0 > /dev/null 2>&1; do
@@ -25,30 +25,52 @@ done
 
 echo "X server is ready"
 
-# Battle.net executable path
-BATTLENET_PATH="/home/webbian/.wine/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
+# Initialize Wine if needed
+if [ ! -d "$WINEPREFIX" ]; then
+    echo "Initializing Wine prefix..."
+    wineboot --init
+    sleep 5
+fi
 
-# Check if Battle.net is installed
+# Battle.net installer path
+INSTALLER_PATH="/root/Battle.net-Setup.exe"
+BATTLENET_PATH="$WINEPREFIX/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
+
+# Check if Battle.net is already installed
 if [ ! -f "$BATTLENET_PATH" ]; then
-    echo "WARNING: Battle.net Launcher not found at $BATTLENET_PATH"
-    echo "Attempting to find Battle.net installation..."
+    echo "Battle.net not installed, running installer..."
     
-    # Try alternative paths
-    ALT_PATH="/home/webbian/.wine/drive_c/Program Files (x86)/Battle.net/Battle.net.exe"
-    if [ -f "$ALT_PATH" ]; then
-        BATTLENET_PATH="$ALT_PATH"
-        echo "Found Battle.net at: $BATTLENET_PATH"
+    if [ -f "$INSTALLER_PATH" ]; then
+        echo "Running Battle.net installer..."
+        wine "$INSTALLER_PATH" --lang=enUS --installpath="C:\\Program Files (x86)\\Battle.net"
+        sleep 10
     else
-        echo "ERROR: Battle.net installation not found"
-        echo "Please ensure Battle.net is properly installed"
-        # Keep container running for debugging
-        sleep infinity
+        echo "ERROR: Battle.net installer not found at $INSTALLER_PATH"
+        echo "Downloading Battle.net installer..."
+        wget -O "$INSTALLER_PATH" "https://www.battle.net/download/getInstallerForGame?os=win&gameProgram=BATTLENET_APP&version=Live"
+        if [ -f "$INSTALLER_PATH" ]; then
+            wine "$INSTALLER_PATH" --lang=enUS --installpath="C:\\Program Files (x86)\\Battle.net"
+            sleep 10
+        fi
     fi
 fi
 
-# Start Battle.net with Wine
-echo "Launching Battle.net with Wine..."
-cd "/home/webbian/.wine/drive_c/Program Files (x86)/Battle.net"
-wine "$BATTLENET_PATH"
+# Try to find Battle.net executable
+if [ ! -f "$BATTLENET_PATH" ]; then
+    ALT_PATH="$WINEPREFIX/drive_c/Program Files (x86)/Battle.net/Battle.net.exe"
+    if [ -f "$ALT_PATH" ]; then
+        BATTLENET_PATH="$ALT_PATH"
+    fi
+fi
+
+# Start Battle.net if found
+if [ -f "$BATTLENET_PATH" ]; then
+    echo "Launching Battle.net..."
+    cd "$(dirname "$BATTLENET_PATH")"
+    wine "$BATTLENET_PATH"
+else
+    echo "Battle.net not found. Starting Wine explorer for manual installation..."
+    wine explorer
+fi
 
 echo "Battle.net process ended"
