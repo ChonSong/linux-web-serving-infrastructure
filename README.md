@@ -29,7 +29,7 @@ This infrastructure supports multiple deployment patterns:
 ### Development Environment
 ```bash
 # Clone and setup development environment
-git clone <repository-url>
+git clone [<repository-url>](https://github.com/ChonSong/linux-web-serving-infrastructure.git)
 cd linux-web-serving-infrastructure
 
 # Start development stack (Redis + App + Nginx)
