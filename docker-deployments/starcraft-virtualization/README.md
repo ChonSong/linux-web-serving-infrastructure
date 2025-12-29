@@ -48,6 +48,7 @@ Docker container running StarCraft: Brood War:
 - noVNC for web-based access
 - Automated lobby creation via xdotool
 - BWAPI support for bot integration
+- **Battle.net launcher** pre-installed for game downloads and updates
 
 ## Quick Start
 
@@ -140,6 +141,7 @@ POST /instances/{instance_id}/restart
 | `GAME_TYPE` | melee | Game type (melee, ffa, ums) |
 | `VNC_PASSWORD` | vncpassword | VNC authentication password |
 | `VNC_RESOLUTION` | 1024x768 | Display resolution |
+| `START_BATTLENET` | false | Start Battle.net launcher on container startup |
 
 ### Resource Limits
 
@@ -196,8 +198,40 @@ starcraft-virtualization/
     │   └── supervisord.conf    # Process management
     └── scripts/
         ├── automate_lobby.sh   # Lobby automation
+        ├── start_battlenet.sh  # Battle.net launcher startup
         └── start_starcraft.sh  # Game startup script
 ```
+
+## Battle.net Integration
+
+The game container includes Battle.net launcher pre-installed, allowing you to download and update Blizzard games directly within the container.
+
+### Starting Battle.net
+
+To start a container with Battle.net launcher enabled:
+
+```bash
+docker run -d \
+  --name starcraft-battlenet \
+  -p 5901:8080 \
+  -e INSTANCE_ID=battlenet1 \
+  -e START_BATTLENET=true \
+  -e VNC_PASSWORD=vncpassword \
+  psvs/starcraft-game:latest
+```
+
+Or via docker-compose:
+
+```bash
+START_BATTLENET=true docker-compose --profile game up -d starcraft-instance
+```
+
+### Battle.net Features
+
+- **Pre-installed**: Battle.net launcher is installed during image build
+- **Wine Dependencies**: Includes corefonts, vcrun2019, and dxvk for compatibility
+- **Web Access**: Access Battle.net via noVNC in your browser
+- **Game Downloads**: Download StarCraft Remastered, StarCraft II, and other Blizzard games
 
 ## Notes
 

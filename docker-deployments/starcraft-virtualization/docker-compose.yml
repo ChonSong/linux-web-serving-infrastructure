@@ -40,6 +40,7 @@ services:
       - GAME_TYPE=${GAME_TYPE:-melee}
       - VNC_PASSWORD=${VNC_PASSWORD:-vncpassword}
       - VNC_RESOLUTION=${VNC_RESOLUTION:-1024x768}
+      - START_BATTLENET=${START_BATTLENET:-false}
     volumes:
       - game-maps:/app/maps:ro
     ports:

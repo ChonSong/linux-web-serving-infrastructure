@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     supervisor \
     curl \
+    cabextract \
     && rm -rf /var/lib/apt/lists/*
 
 # Create wine prefix
@@ -22,6 +23,20 @@ ENV DISPLAY=:0
 RUN winecfg && \
     wine reg add 'HKEY_CURRENT_USER\Software\Wine\Direct3D' /v 'DirectDrawRenderer' /t REG_SZ /d 'gdi' /f && \
     wine reg add 'HKEY_CURRENT_USER\Software\Wine\DllOverrides' /v 'ddraw' /t REG_SZ /d 'native,builtin' /f
+
+# Install winetricks dependencies for Battle.net
+RUN winetricks -q corefonts && \
+    winetricks -q vcrun2019 && \
+    winetricks -q dxvk
+
+# Download and install Battle.net
+WORKDIR /home/webbian
+RUN wget -O Battle.net-Setup.exe "https://www.battle.net/download/getInstallerForGame?os=win&gameProgram=BATTLENET_APP&version=Live" && \
+    wine Battle.net-Setup.exe --lang=enUS --installpath="C:\\Program Files (x86)\\Battle.net" && \
+    rm -f Battle.net-Setup.exe
+
+# Copy Battle.net startup script
+COPY scripts/start_battlenet.sh /home/webbian/scripts/
 
 # Install StarCraft
 WORKDIR /home/webbian/starcraft
