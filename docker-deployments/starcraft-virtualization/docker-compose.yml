@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  starcraft-agent:
+    image: psvs/starcraft-bw:latest
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: psvs-agent
+    environment:
+      - AGENT_PORT=8080
+      - MAX_INSTANCES=10
+      - HOST_IP=${HOST_IP:-localhost}
+    volumes:
+      - agent-data:/var/lib/psvs
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8080:8080"  # Agent API
+    networks:
+      - psvs-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Example game instance (managed by agent)
+  # This service is typically spawned dynamically by the agent
+  starcraft-instance:
+    image: psvs/starcraft-game:latest
+    build:
+      context: ./starcraft-game
+      dockerfile: Dockerfile
+    container_name: "starcraft-${INSTANCE_ID:-default}"
+    environment:
+      - INSTANCE_ID=${INSTANCE_ID:-default}
+      - MAP_FILE=${MAP_FILE:-(2)Showdown.scm}
+      - GAME_TYPE=${GAME_TYPE:-melee}
+      - VNC_PASSWORD=${VNC_PASSWORD:-vncpassword}
+      - VNC_RESOLUTION=${VNC_RESOLUTION:-1024x768}
+    volumes:
+      - game-maps:/app/maps:ro
+    ports:
+      - "${VNC_PORT:-5901}:8080"  # noVNC port
+    networks:
+      - psvs-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+    cap_add:
+      - SYS_PTRACE  # For BWAPI injection
+    profiles:
+      - game  # Only start when explicitly requested
+
+networks:
+  psvs-network:
+    driver: bridge
+
+volumes:
+  agent-data:
+  game-maps:
